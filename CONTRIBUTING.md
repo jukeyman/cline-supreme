@@ -1,6 +1,13 @@
-# Contributing to Cline
+# 🤝 Contributing to Cline Supreme
 
-We're thrilled you're interested in contributing to Cline. Whether you're fixing a bug, adding a feature, or improving our docs, every contribution makes Cline smarter! To keep our community vibrant and welcoming, all members must adhere to our [Code of Conduct](CODE_OF_CONDUCT.md).
+---
+
+**🏢 Rick Jefferson Solutions** | *Enterprise AI Solutions & Legal Technology Innovation*  
+📞 **Support**: [945-308-8003](tel:945-308-8003) | 📧 **Email**: [support@rjbizsolution.com](mailto:support@rjbizsolution.com)
+
+---
+
+We're thrilled you're interested in contributing to **Cline Supreme**! Whether you're fixing a bug, adding a feature, improving our docs, or enhancing our AI agents, every contribution makes Cline Supreme smarter and more powerful! To keep our community vibrant and welcoming, all members must adhere to our [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Reporting Bugs or Issues
 

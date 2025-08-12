@@ -1,8 +1,20 @@
 blank_issues_enabled: false
 contact_links:
-    - name: ✨ Feature Request
-      url: https://github.com/cline/cline/discussions/categories/feature-requests?discussions_q=is%3Aopen+category%3A%22Feature+Requests%22+sort%3Atop
-      about: Share and vote on feature requests for Cline
-    - name: 👋 Cline Discord
-      url: https://discord.gg/cline
-      about: Join our Discord community for discussions and support
+  - name: 🏢 Rick Jefferson Solutions - Enterprise Support
+    url: https://rjbizsolution.com
+    about: Professional support, custom development, and enterprise solutions
+  - name: 📞 Direct Support Hotline
+    url: tel:945-308-8003
+    about: Call 945-308-8003 for immediate assistance with Cline Supreme
+  - name: 📧 Email Support
+    url: mailto:support@rjbizsolution.com
+    about: Email us at support@rjbizsolution.com for technical support
+  - name: 💬 Discord Community
+    url: https://discord.gg/cline
+    about: Join our Discord community for discussions, questions, and support
+  - name: 📖 Documentation
+    url: https://github.com/cline/cline/blob/main/README.md
+    about: Read the documentation for setup instructions and usage guides
+  - name: 🚀 Custom AI Agent Development
+    url: https://rjbizsolution.com/ai-agents
+    about: Need custom AI agents? We build specialized solutions for legal, compliance, and business automation

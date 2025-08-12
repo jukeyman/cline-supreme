@@ -1,13 +1,22 @@
-# Contributor Covenant Code of Conduct
+# 🤝 Code of Conduct - Cline Supreme
 
-## Our Pledge
+---
+
+**🏢 Rick Jefferson Solutions** | *Enterprise AI Solutions & Legal Technology Innovation*  
+📞 **Support**: [945-308-8003](tel:945-308-8003) | 📧 **Email**: [support@rjbizsolution.com](mailto:support@rjbizsolution.com)
+
+---
+
+## 🎯 Our Pledge
 
 In the interest of fostering an open and welcoming environment, we as
-contributors and maintainers pledge to making participation in our project and
+contributors and maintainers of **Cline Supreme** pledge to making participation in our project and
 our community a harassment-free experience for everyone, regardless of age, body
 size, disability, ethnicity, sex characteristics, gender identity and expression,
 level of experience, education, socio-economic status, nationality, personal
 appearance, race, religion, or sexual identity and orientation.
+
+We pledge to act and interact in ways that contribute to an open, welcoming, diverse, inclusive, and healthy community focused on advancing AI-powered development tools and legal technology innovation.
 
 ## Our Standards
 

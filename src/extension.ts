@@ -1,627 +1,283 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
+import * as vscode from 'vscode';
+import { WebviewProvider } from './webview/provider';
+import { Controller } from './core/controller';
+import { AgentOrchestrator } from './agents/orchestrator';
+import { ModelManager } from './api/model-manager';
+import { ConfigManager } from './config/manager';
+import { SecurityManager } from './security/manager';
+import { DeploymentManager } from './deployment/manager';
+import { SystemPromptManager } from './prompts/system-prompts';
+import { Logger } from './utils/logger';
 
-import { DIFF_VIEW_URI_SCHEME } from "@hosts/vscode/VscodeDiffViewProvider"
-import { WebviewProviderType as WebviewProviderTypeEnum } from "@shared/proto/cline/ui"
-import assert from "node:assert"
-import { setTimeout as setTimeoutPromise } from "node:timers/promises"
-import pWaitFor from "p-wait-for"
-import * as vscode from "vscode"
-import { sendAccountButtonClickedEvent } from "./core/controller/ui/subscribeToAccountButtonClicked"
-import { sendChatButtonClickedEvent } from "./core/controller/ui/subscribeToChatButtonClicked"
-import { sendHistoryButtonClickedEvent } from "./core/controller/ui/subscribeToHistoryButtonClicked"
-import { sendMcpButtonClickedEvent } from "./core/controller/ui/subscribeToMcpButtonClicked"
-import { sendSettingsButtonClickedEvent } from "./core/controller/ui/subscribeToSettingsButtonClicked"
-import { WebviewProvider } from "./core/webview"
-import { createClineAPI } from "./exports"
-import { Logger } from "./services/logging/Logger"
-import { cleanupTestMode, initializeTestMode } from "./services/test/TestMode"
-import { WebviewProviderType } from "./shared/webview/types"
-import "./utils/path" // necessary to have access to String.prototype.toPosix
+let webviewProvider: WebviewProvider | undefined;
+let controller: Controller | undefined;
+let agentOrchestrator: AgentOrchestrator | undefined;
+let modelManager: ModelManager | undefined;
+let configManager: ConfigManager | undefined;
+let securityManager: SecurityManager | undefined;
+let deploymentManager: DeploymentManager | undefined;
+let promptManager: SystemPromptManager | undefined;
+let outputChannel: vscode.OutputChannel | undefined;
 
-import { HostProvider } from "@/hosts/host-provider"
-import { vscodeHostBridgeClient } from "@/hosts/vscode/hostbridge/client/host-grpc-client"
-import { readTextFromClipboard, writeTextToClipboard } from "@/utils/env"
-import type { ExtensionContext } from "vscode"
-import { initialize, tearDown } from "./common"
-import { sendFocusChatInputEvent } from "./core/controller/ui/subscribeToFocusChatInput"
-import { VscodeDiffViewProvider } from "./hosts/vscode/VscodeDiffViewProvider"
-import { VscodeWebviewProvider } from "./hosts/vscode/VscodeWebviewProvider"
-import { GitCommitGenerator } from "./integrations/git/commit-message-generator"
-import { AuthService } from "./services/auth/AuthService"
-import { telemetryService } from "./services/posthog/PostHogClientProvider"
-import { SharedUriHandler } from "./services/uri/SharedUriHandler"
-import { ShowMessageType } from "./shared/proto/host/window"
-/*
-Built using https://github.com/microsoft/vscode-webview-ui-toolkit
-
-Inspired by
-https://github.com/microsoft/vscode-webview-ui-toolkit-samples/tree/main/default/weather-webview
-https://github.com/microsoft/vscode-webview-ui-toolkit-samples/tree/main/frameworks/hello-world-react-cra
-
-*/
-
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 export async function activate(context: vscode.ExtensionContext) {
-	setupHostProvider(context)
+	try {
+		// Create output channel for logging
+		outputChannel = vscode.window.createOutputChannel('Cline Supreme');
+		const logger = new Logger('ClineSupreme');
+		logger.info('🚀 Activating Cline Supreme - Multi-Agent AI Assistant');
+		outputChannel.appendLine('🔧 Initializing Cline Supreme extension...');
 
-	const sidebarWebview = (await initialize(context)) as VscodeWebviewProvider
+		// Initialize security manager first
+		securityManager = new SecurityManager(context);
 
-	Logger.log("Cline extension activated")
+		// Initialize configuration manager
+		configManager = new ConfigManager(context, securityManager);
 
-	const testModeWatchers = await initializeTestMode(sidebarWebview)
-	// Initialize test mode and add disposables to context
-	context.subscriptions.push(...testModeWatchers)
+		// Initialize model manager with multi-provider support
+		modelManager = new ModelManager(configManager);
 
-	vscode.commands.executeCommand("setContext", "cline.isDevMode", IS_DEV && IS_DEV === "true")
+		// Initialize prompt manager
+		promptManager = SystemPromptManager.getInstance();
 
-	context.subscriptions.push(
-		vscode.window.registerWebviewViewProvider(WebviewProvider.sideBarId, sidebarWebview, {
-			webviewOptions: { retainContextWhenHidden: true },
-		}),
-	)
+		// Initialize agent orchestrator for multi-agent workflows
+		agentOrchestrator = new AgentOrchestrator(modelManager, promptManager);
 
-	context.subscriptions.push(
-		vscode.commands.registerCommand("cline.plusButtonClicked", async (webview: any) => {
-			console.log("[DEBUG] plusButtonClicked", webview)
-			// Pass the webview type to the event sender
-			const isSidebar = !webview
+		// Initialize deployment manager
+		deploymentManager = new DeploymentManager(configManager);
 
-			const openChat = async (instance: WebviewProvider) => {
-				await instance?.controller.clearTask()
-				await instance?.controller.postStateToWebview()
-				await sendChatButtonClickedEvent(instance.controller.id)
-			}
+		// Initialize core controller
+		controller = new Controller(
+			context,
+			agentOrchestrator,
+			modelManager,
+			configManager,
+			securityManager,
+			deploymentManager
+		);
 
-			if (isSidebar) {
-				const sidebarInstance = WebviewProvider.getSidebarInstance()
-				if (sidebarInstance) {
-					openChat(sidebarInstance)
-					// Send event to the sidebar instance
-				}
-			} else {
-				const tabInstances = WebviewProvider.getTabInstances()
-				for (const instance of tabInstances) {
-					openChat(instance)
-				}
-			}
-		}),
-	)
+		// Initialize webview provider
+		webviewProvider = new WebviewProvider(
+			context.extensionUri,
+			agentOrchestrator,
+			modelManager,
+			configManager,
+			securityManager
+		);
 
-	context.subscriptions.push(
-		vscode.commands.registerCommand("cline.mcpButtonClicked", (webview: any) => {
-			console.log("[DEBUG] mcpButtonClicked", webview)
+		// Controller initializes itself in constructor
 
-			const activeInstance = WebviewProvider.getActiveInstance()
-			const isSidebar = !webview
-
-			if (isSidebar) {
-				const sidebarInstance = WebviewProvider.getSidebarInstance()
-				const sidebarInstanceId = sidebarInstance?.getClientId()
-				if (sidebarInstanceId) {
-					sendMcpButtonClickedEvent(sidebarInstanceId)
-				} else {
-					console.error("[DEBUG] No sidebar instance found, cannot send MCP button event")
-				}
-			} else {
-				const activeInstanceId = activeInstance?.getClientId()
-				if (activeInstanceId) {
-					sendMcpButtonClickedEvent(activeInstanceId)
-				} else {
-					console.error("[DEBUG] No active instance found, cannot send MCP button event")
-				}
-			}
-		}),
-	)
-
-	const openClineInNewTab = async () => {
-		Logger.log("Opening Cline in new tab")
-		// (this example uses webviewProvider activation event which is necessary to deserialize cached webview, but since we use retainContextWhenHidden, we don't need to use that event)
-		// https://github.com/microsoft/vscode-extension-samples/blob/main/webview-sample/src/extension.ts
-		const tabWebview = HostProvider.get().createWebviewProvider(WebviewProviderType.TAB)
-		//const column = vscode.window.activeTextEditor ? vscode.window.activeTextEditor.viewColumn : undefined
-		const lastCol = Math.max(...vscode.window.visibleTextEditors.map((editor) => editor.viewColumn || 0))
-
-		// Check if there are any visible text editors, otherwise open a new group to the right
-		const hasVisibleEditors = vscode.window.visibleTextEditors.length > 0
-		if (!hasVisibleEditors) {
-			await vscode.commands.executeCommand("workbench.action.newGroupRight")
-		}
-		const targetCol = hasVisibleEditors ? Math.max(lastCol + 1, 1) : vscode.ViewColumn.Two
-
-		const panel = vscode.window.createWebviewPanel(WebviewProvider.tabPanelId, "Cline", targetCol, {
-			enableScripts: true,
-			retainContextWhenHidden: true,
-			localResourceRoots: [context.extensionUri],
-		})
-		// TODO: use better svg icon with light and dark variants (see https://stackoverflow.com/questions/58365687/vscode-extension-iconpath)
-
-		panel.iconPath = {
-			light: vscode.Uri.joinPath(context.extensionUri, "assets", "icons", "robot_panel_light.png"),
-			dark: vscode.Uri.joinPath(context.extensionUri, "assets", "icons", "robot_panel_dark.png"),
-		}
-		tabWebview.resolveWebviewView(panel)
-
-		// Lock the editor group so clicking on files doesn't open them over the panel
-		await setTimeoutPromise(100)
-		await vscode.commands.executeCommand("workbench.action.lockEditorGroup")
-		return tabWebview
-	}
-
-	context.subscriptions.push(vscode.commands.registerCommand("cline.popoutButtonClicked", openClineInNewTab))
-	context.subscriptions.push(vscode.commands.registerCommand("cline.openInNewTab", openClineInNewTab))
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand("cline.settingsButtonClicked", (webview: any) => {
-			const isSidebar = !webview
-			const webviewType = isSidebar ? WebviewProviderTypeEnum.SIDEBAR : WebviewProviderTypeEnum.TAB
-
-			sendSettingsButtonClickedEvent(webviewType)
-		}),
-	)
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand("cline.historyButtonClicked", async (webview: any) => {
-			console.log("[DEBUG] historyButtonClicked", webview)
-			// Pass the webview type to the event sender
-			const isSidebar = !webview
-			const webviewType = isSidebar ? WebviewProviderTypeEnum.SIDEBAR : WebviewProviderTypeEnum.TAB
-
-			// Send event to all subscribers using the gRPC streaming method
-			await sendHistoryButtonClickedEvent(webviewType)
-		}),
-	)
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand("cline.accountButtonClicked", (webview: any) => {
-			console.log("[DEBUG] accountButtonClicked", webview)
-
-			const isSidebar = !webview
-			if (isSidebar) {
-				const sidebarInstance = WebviewProvider.getSidebarInstance()
-				if (sidebarInstance) {
-					// Send event to sidebar controller
-					sendAccountButtonClickedEvent(sidebarInstance.controller.id)
-				}
-			} else {
-				// Send to all tab instances
-				const tabInstances = WebviewProvider.getTabInstances()
-				for (const instance of tabInstances) {
-					sendAccountButtonClickedEvent(instance.controller.id)
-				}
-			}
-		}),
-	)
-
-	/*
-	We use the text document content provider API to show the left side for diff view by creating a virtual document for the original content. This makes it readonly so users know to edit the right side if they want to keep their changes.
-
-	- This API allows you to create readonly documents in VSCode from arbitrary sources, and works by claiming an uri-scheme for which your provider then returns text contents. The scheme must be provided when registering a provider and cannot change afterwards.
-	- Note how the provider doesn't create uris for virtual documents - its role is to provide contents given such an uri. In return, content providers are wired into the open document logic so that providers are always considered.
-	https://code.visualstudio.com/api/extension-guides/virtual-documents
-	*/
-	const diffContentProvider = new (class implements vscode.TextDocumentContentProvider {
-		provideTextDocumentContent(uri: vscode.Uri): string {
-			return Buffer.from(uri.query, "base64").toString("utf-8")
-		}
-	})()
-	context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider(DIFF_VIEW_URI_SCHEME, diffContentProvider))
-
-	const handleUri = async (uri: vscode.Uri) => {
-		const success = await SharedUriHandler.handleUri(uri)
-		if (!success) {
-			console.warn("Extension URI handler: Failed to process URI:", uri.toString())
-		}
-	}
-	context.subscriptions.push(vscode.window.registerUriHandler({ handleUri }))
-
-	// Register size testing commands in development mode
-	if (IS_DEV && IS_DEV === "true") {
-		// Use dynamic import to avoid loading the module in production
-		import("./dev/commands/tasks")
-			.then((module) => {
-				const devTaskCommands = module.registerTaskCommands(context, sidebarWebview.controller)
-				context.subscriptions.push(...devTaskCommands)
-				Logger.log("Cline dev task commands registered")
-			})
-			.catch((error) => {
-				Logger.log("Failed to register dev task commands: " + error)
-			})
-	}
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand("cline.addToChat", async (range?: vscode.Range, diagnostics?: vscode.Diagnostic[]) => {
-			await vscode.commands.executeCommand("cline.focusChatInput") // Ensure Cline is visible and input focused
-			const activeWebview = WebviewProvider.getLastActiveInstance()
-			const clientId = activeWebview?.getClientId()
-			await pWaitFor(() => !!activeWebview)
-			const editor = vscode.window.activeTextEditor
-			if (!editor || !clientId) {
-				return
-			}
-
-			await sendFocusChatInputEvent(clientId)
-
-			// Use provided range if available, otherwise use current selection
-			// (vscode command passes an argument in the first param by default, so we need to ensure it's a Range object)
-			const textRange = range instanceof vscode.Range ? range : editor.selection
-			const selectedText = editor.document.getText(textRange)
-
-			if (!selectedText) {
-				return
-			}
-
-			// Get the file path and language ID
-			const filePath = editor.document.uri.fsPath
-			const languageId = editor.document.languageId
-
-			await activeWebview?.controller.addSelectedCodeToChat(
-				selectedText,
-				filePath,
-				languageId,
-				Array.isArray(diagnostics) ? diagnostics : undefined,
-			)
-			telemetryService.captureButtonClick("codeAction_addToChat", activeWebview?.controller.task?.taskId)
-		}),
-	)
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand("cline.addTerminalOutputToChat", async () => {
-			const terminal = vscode.window.activeTerminal
-			if (!terminal) {
-				return
-			}
-
-			// Save current clipboard content
-			const tempCopyBuffer = await readTextFromClipboard()
-
-			try {
-				// Copy the *existing* terminal selection (without selecting all)
-				await vscode.commands.executeCommand("workbench.action.terminal.copySelection")
-
-				// Get copied content
-				const terminalContents = (await readTextFromClipboard()).trim()
-
-				// Restore original clipboard content
-				await writeTextToClipboard(tempCopyBuffer)
-
-				if (!terminalContents) {
-					// No terminal content was copied (either nothing selected or some error)
-					return
-				}
-
-				// [Optional] Any additional logic to process multi-line content can remain here
-				// For example:
-				/*
-				const lines = terminalContents.split("\n")
-				const lastLine = lines.pop()?.trim()
-				if (lastLine) {
-					let i = lines.length - 1
-					while (i >= 0 && !lines[i].trim().startsWith(lastLine)) {
-						i--
-					}
-					terminalContents = lines.slice(Math.max(i, 0)).join("\n")
-				}
-				*/
-
-				// Send to sidebar provider
-				const visibleWebview = WebviewProvider.getVisibleInstance()
-				await visibleWebview?.controller.addSelectedTerminalOutputToChat(terminalContents, terminal.name)
-			} catch (error) {
-				// Ensure clipboard is restored even if an error occurs
-				await writeTextToClipboard(tempCopyBuffer)
-				console.error("Error getting terminal contents:", error)
-				HostProvider.window.showMessage({
-					type: ShowMessageType.ERROR,
-					message: "Failed to get terminal contents",
-				})
-			}
-		}),
-	)
-
-	const CONTEXT_LINES_TO_EXPAND = 3
-	const START_OF_LINE_CHAR_INDEX = 0
-	const LINE_COUNT_ADJUSTMENT_FOR_ZERO_INDEXING = 1
-
-	// Register code action provider
-	context.subscriptions.push(
-		vscode.languages.registerCodeActionsProvider(
-			"*",
-			new (class implements vscode.CodeActionProvider {
-				public static readonly providedCodeActionKinds = [vscode.CodeActionKind.QuickFix, vscode.CodeActionKind.Refactor]
-
-				provideCodeActions(
-					document: vscode.TextDocument,
-					range: vscode.Range,
-					context: vscode.CodeActionContext,
-				): vscode.CodeAction[] {
-					const actions: vscode.CodeAction[] = []
-					const editor = vscode.window.activeTextEditor // Get active editor for selection check
-
-					// Expand range to include surrounding 3 lines or use selection if broader
-					const selection = editor?.selection
-					let expandedRange = range
-					if (
-						editor &&
-						selection &&
-						!selection.isEmpty &&
-						selection.contains(range.start) &&
-						selection.contains(range.end)
-					) {
-						expandedRange = selection
-					} else {
-						expandedRange = new vscode.Range(
-							Math.max(0, range.start.line - CONTEXT_LINES_TO_EXPAND),
-							START_OF_LINE_CHAR_INDEX,
-							Math.min(
-								document.lineCount - LINE_COUNT_ADJUSTMENT_FOR_ZERO_INDEXING,
-								range.end.line + CONTEXT_LINES_TO_EXPAND,
-							),
-							document.lineAt(
-								Math.min(
-									document.lineCount - LINE_COUNT_ADJUSTMENT_FOR_ZERO_INDEXING,
-									range.end.line + CONTEXT_LINES_TO_EXPAND,
-								),
-							).text.length,
-						)
-					}
-
-					// Add to Cline (Always available)
-					const addAction = new vscode.CodeAction("Add to Cline", vscode.CodeActionKind.QuickFix)
-					addAction.command = {
-						command: "cline.addToChat",
-						title: "Add to Cline",
-						arguments: [expandedRange, context.diagnostics],
-					}
-					actions.push(addAction)
-
-					// Explain with Cline (Always available)
-					const explainAction = new vscode.CodeAction("Explain with Cline", vscode.CodeActionKind.RefactorExtract) // Using a refactor kind
-					explainAction.command = {
-						command: "cline.explainCode",
-						title: "Explain with Cline",
-						arguments: [expandedRange],
-					}
-					actions.push(explainAction)
-
-					// Improve with Cline (Always available)
-					const improveAction = new vscode.CodeAction("Improve with Cline", vscode.CodeActionKind.RefactorRewrite) // Using a refactor kind
-					improveAction.command = {
-						command: "cline.improveCode",
-						title: "Improve with Cline",
-						arguments: [expandedRange],
-					}
-					actions.push(improveAction)
-
-					// Fix with Cline (Only if diagnostics exist)
-					if (context.diagnostics.length > 0) {
-						const fixAction = new vscode.CodeAction("Fix with Cline", vscode.CodeActionKind.QuickFix)
-						fixAction.isPreferred = true
-						fixAction.command = {
-							command: "cline.fixWithCline",
-							title: "Fix with Cline",
-							arguments: [expandedRange, context.diagnostics],
-						}
-						actions.push(fixAction)
-					}
-					return actions
-				}
-			})(),
+		// Register webview provider
+		const webviewDisposable = vscode.window.registerWebviewViewProvider(
+			'clineSupreme.dashboard',
+			webviewProvider,
 			{
-				providedCodeActionKinds: [
-					vscode.CodeActionKind.QuickFix,
-					vscode.CodeActionKind.RefactorExtract,
-					vscode.CodeActionKind.RefactorRewrite,
-				],
-			},
-		),
-	)
-
-	// Register the command handler
-	context.subscriptions.push(
-		vscode.commands.registerCommand("cline.fixWithCline", async (range: vscode.Range, diagnostics: vscode.Diagnostic[]) => {
-			// Add this line to focus the chat input first
-			await vscode.commands.executeCommand("cline.focusChatInput")
-			// Wait for a webview instance to become available after focusing
-			await pWaitFor(() => !!WebviewProvider.getLastActiveInstance())
-			const editor = vscode.window.activeTextEditor
-			if (!editor) {
-				return
-			}
-
-			const selectedText = editor.document.getText(range)
-			const filePath = editor.document.uri.fsPath
-			const languageId = editor.document.languageId
-
-			// Send to last active instance with diagnostics
-			const activeWebview = WebviewProvider.getLastActiveInstance()
-			await activeWebview?.controller.fixWithCline(selectedText, filePath, languageId, diagnostics)
-			telemetryService.captureButtonClick("codeAction_fixWithCline", activeWebview?.controller.task?.taskId)
-		}),
-	)
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand("cline.explainCode", async (range: vscode.Range) => {
-			await vscode.commands.executeCommand("cline.focusChatInput") // Ensure Cline is visible and input focused
-			await pWaitFor(() => !!WebviewProvider.getLastActiveInstance())
-			const editor = vscode.window.activeTextEditor
-			if (!editor) {
-				return
-			}
-			const selectedText = editor.document.getText(range)
-			if (!selectedText.trim()) {
-				HostProvider.window.showMessage({
-					type: ShowMessageType.INFORMATION,
-					message: "Please select some code to explain.",
-				})
-				return
-			}
-			const filePath = editor.document.uri.fsPath
-			const activeWebview = WebviewProvider.getLastActiveInstance()
-			const fileMention = activeWebview?.controller.getFileMentionFromPath(filePath) || filePath
-			const prompt = `Explain the following code from ${fileMention}:\n\`\`\`${editor.document.languageId}\n${selectedText}\n\`\`\``
-			await activeWebview?.controller.initTask(prompt)
-			telemetryService.captureButtonClick("codeAction_explainCode", activeWebview?.controller.task?.taskId)
-		}),
-	)
-
-	context.subscriptions.push(
-		vscode.commands.registerCommand("cline.improveCode", async (range: vscode.Range) => {
-			await vscode.commands.executeCommand("cline.focusChatInput") // Ensure Cline is visible and input focused
-			await pWaitFor(() => !!WebviewProvider.getLastActiveInstance())
-			const editor = vscode.window.activeTextEditor
-			if (!editor) {
-				return
-			}
-			const selectedText = editor.document.getText(range)
-			if (!selectedText.trim()) {
-				HostProvider.window.showMessage({
-					type: ShowMessageType.INFORMATION,
-					message: "Please select some code to improve.",
-				})
-				return
-			}
-			const filePath = editor.document.uri.fsPath
-			const activeWebview = WebviewProvider.getLastActiveInstance()
-			const fileMention = activeWebview?.controller.getFileMentionFromPath(filePath) || filePath
-			const prompt = `Improve the following code from ${fileMention} (e.g., suggest refactorings, optimizations, or better practices):\n\`\`\`${editor.document.languageId}\n${selectedText}\n\`\`\``
-			await activeWebview?.controller.initTask(prompt)
-			telemetryService.captureButtonClick("codeAction_improveCode", activeWebview?.controller.task?.taskId)
-		}),
-	)
-
-	// Register the focusChatInput command handler
-	context.subscriptions.push(
-		vscode.commands.registerCommand("cline.focusChatInput", async () => {
-			// Fast path: check for existing active instance
-			let activeWebview = WebviewProvider.getLastActiveInstance()
-
-			if (activeWebview) {
-				// Instance exists - just reveal and focus it
-				const webview = activeWebview.getWebview()
-				if (webview) {
-					if (webview && "reveal" in webview) {
-						webview.reveal()
-					} else if ("show" in webview) {
-						webview.show()
-					}
-				}
-			} else {
-				// No active instance - need to find or create one
-				WebviewProvider.setLastActiveControllerId(null)
-
-				// Check for existing tab instances first (cheaper than focusing sidebar)
-				const tabInstances = WebviewProvider.getTabInstances()
-				if (tabInstances.length > 0) {
-					activeWebview = tabInstances[tabInstances.length - 1]
-				} else {
-					// Try to focus sidebar
-					await vscode.commands.executeCommand("claude-dev.SidebarProvider.focus")
-
-					// Small delay for focus to complete
-					await new Promise((resolve) => setTimeout(resolve, 200))
-					// Last resort: create new tab
-					activeWebview = WebviewProvider.getSidebarInstance() || (await openClineInNewTab())
+				webviewOptions: {
+					retainContextWhenHidden: true
 				}
 			}
+		);
 
-			// Send focus event
-			const clientId = activeWebview?.getClientId()
-			if (!clientId) {
-				console.error("FocusChatInput: Could not find or activate a Cline webview to focus.")
-				HostProvider.window.showMessage({
-					type: ShowMessageType.ERROR,
-					message: "Could not activate Cline view. Please try opening it manually from the Activity Bar.",
-				})
-				return
-			}
-
-			sendFocusChatInputEvent(clientId)
-			telemetryService.captureButtonClick("command_focusChatInput", activeWebview.controller?.task?.taskId)
-		}),
-	)
-
-	// Register the openWalkthrough command handler
-	context.subscriptions.push(
-		vscode.commands.registerCommand("cline.openWalkthrough", async () => {
-			await vscode.commands.executeCommand("workbench.action.openWalkthrough", "saoudrizwan.claude-dev#ClineWalkthrough")
-			telemetryService.captureButtonClick("command_openWalkthrough")
-		}),
-	)
-
-	// Register the generateGitCommitMessage command handler
-	context.subscriptions.push(
-		vscode.commands.registerCommand("cline.generateGitCommitMessage", async (scm) => {
-			await GitCommitGenerator?.generate?.(context, scm)
-		}),
-		vscode.commands.registerCommand("cline.abortGitCommitMessage", () => {
-			GitCommitGenerator?.abort?.()
-		}),
-	)
-
-	context.subscriptions.push(
-		context.secrets.onDidChange(async (event) => {
-			if (event.key === "clineAccountId") {
-				// Check if the secret was removed (logout) or added/updated (login)
-				const secretValue = await context.secrets.get("clineAccountId")
-				const activeWebviewProvider = WebviewProvider.getVisibleInstance()
-				const controller = activeWebviewProvider?.controller
-
-				const authService = AuthService.getInstance(controller)
-				if (secretValue) {
-					// Secret was added or updated - restore auth info (login from another window)
-					authService?.restoreRefreshTokenAndRetrieveAuthInfo()
-				} else {
-					// Secret was removed - handle logout for all windows
-					authService?.handleDeauth()
+		// Also register legacy view for backward compatibility
+		const legacyWebviewDisposable = vscode.window.registerWebviewViewProvider(
+			'cline.chatView',
+			webviewProvider,
+			{
+				webviewOptions: {
+					retainContextWhenHidden: true
 				}
 			}
-		}),
-	)
+		);
 
-	return createClineAPI(sidebarWebview.controller)
+		// Register enhanced commands
+		registerCommands(context, controller, webviewProvider);
+
+		// Register event listeners
+		registerEventListeners(context, controller);
+
+		// Add disposables to context
+		context.subscriptions.push(
+			webviewDisposable,
+			legacyWebviewDisposable,
+			outputChannel,
+			controller,
+			securityManager
+		);
+
+		// Set context for conditional UI elements
+		vscode.commands.executeCommand('setContext', 'cline.chatViewEnabled', true);
+		vscode.commands.executeCommand('setContext', 'clineSupreme.enabled', true);
+		vscode.commands.executeCommand('setContext', 'cline.multiAgentEnabled', true);
+
+		outputChannel.appendLine('✅ Cline Supreme activated successfully!');
+		logger.info('✅ Cline Supreme activated successfully');
+		logger.info('🤖 Multi-Agent Mode: Enabled');
+		logger.info('🧠 Enhanced Model Management: Active');
+		logger.info('🔄 Advanced Orchestration: Ready');
+
+		// Show welcome message
+		showWelcomeMessage(context);
+
+	} catch (error) {
+		const errorMessage = `❌ Failed to activate Cline Supreme: ${error instanceof Error ? error.message : String(error)}`;
+		if (outputChannel) {
+			outputChannel.appendLine(errorMessage);
+		}
+		const logger = new Logger('ClineSupreme');
+		logger.error('❌ Failed to activate Cline Supreme:', error);
+		vscode.window.showErrorMessage(
+			'Failed to activate Cline Supreme. Please check the output panel for details.',
+			'Open Output'
+		).then(selection => {
+			if (selection === 'Open Output' && outputChannel) {
+				outputChannel.show();
+			}
+		});
+		throw error;
+	}
 }
 
-function setupHostProvider(context: ExtensionContext) {
-	console.log("Setting up vscode host providers...")
-
-	const createWebview = (type: WebviewProviderType) => new VscodeWebviewProvider(context, type)
-	const createDiffView = () => new VscodeDiffViewProvider()
-	const outputChannel = vscode.window.createOutputChannel("Cline")
-	context.subscriptions.push(outputChannel)
-
-	const getCallbackUri = async () => `${vscode.env.uriScheme || "vscode"}://saoudrizwan.claude-dev`
-	HostProvider.initialize(createWebview, createDiffView, vscodeHostBridgeClient, outputChannel.appendLine, getCallbackUri)
+export async function deactivate(): Promise<void> {
+	console.log('🛑 Deactivating Cline Supreme...');
+	
+	try {
+		if (controller) {
+			await controller.dispose();
+		}
+		
+		if (webviewProvider) {
+			webviewProvider.dispose();
+		}
+		
+		if (outputChannel) {
+			outputChannel.appendLine('👋 Cline Supreme deactivated');
+			outputChannel.dispose();
+		}
+		
+		console.log('✅ Cline Supreme deactivated successfully');
+	} catch (error) {
+		console.error('❌ Error during deactivation:', error);
+	}
 }
 
-// This method is called when your extension is deactivated
-export async function deactivate() {
-	tearDown()
-
-	// Clean up test mode
-	cleanupTestMode()
-
-	Logger.log("Cline extension deactivated")
+/**
+ * Register all extension commands
+ */
+function registerCommands(context: vscode.ExtensionContext, controller: Controller, webviewProvider: WebviewProvider): void {
+	const commands = [
+		// Legacy commands for backward compatibility
+		{
+			command: 'cline.plusButtonTapped',
+			callback: () => {
+					// Legacy command - show info message
+					vscode.window.showInformationMessage('Use the new Cline Supreme dashboard for enhanced features!');
+				}
+		},
+		{
+			command: 'cline.openInNewTab',
+			callback: async () => {
+					// Legacy command - open dashboard
+					vscode.commands.executeCommand('clineSupreme.openDashboard');
+				}
+		},
+		// Enhanced commands
+		{
+			command: 'clineSupreme.openDashboard',
+			callback: () => {
+				vscode.commands.executeCommand('clineSupreme.dashboard.focus');
+			}
+		},
+		{
+			command: 'clineSupreme.createTask',
+			callback: async () => {
+					// Show task creation interface
+					vscode.window.showInformationMessage('Task creation feature coming soon!');
+				}
+		},
+		{
+			command: 'clineSupreme.analyzeCode',
+			callback: async () => {
+					// Show code analysis interface
+					vscode.window.showInformationMessage('Code analysis feature coming soon!');
+				}
+		},
+		{
+			command: 'clineSupreme.deployProject',
+			callback: async () => {
+					// Show deployment interface
+					vscode.window.showInformationMessage('Project deployment feature coming soon!');
+				}
+		}
+	];
+	
+	// Register all commands
+	commands.forEach(({ command, callback }) => {
+		const disposable = vscode.commands.registerCommand(command, callback);
+		context.subscriptions.push(disposable);
+	});
 }
 
-// TODO: Find a solution for automatically removing DEV related content from production builds.
-//  This type of code is fine in production to keep. We just will want to remove it from production builds
-//  to bring down built asset sizes.
-//
-// This is a workaround to reload the extension when the source code changes
-// since vscode doesn't support hot reload for extensions
-const IS_DEV = process.env.IS_DEV
-const DEV_WORKSPACE_FOLDER = process.env.DEV_WORKSPACE_FOLDER
+/**
+ * Register event listeners
+ */
+function registerEventListeners(context: vscode.ExtensionContext, controller: Controller): void {
+	// Configuration change listener
+	const configChangeDisposable = vscode.workspace.onDidChangeConfiguration(event => {
+		if (event.affectsConfiguration('cline') || event.affectsConfiguration('clineSupreme')) {
+			// Handle configuration changes
+			console.log('Configuration changed:', event);
+		}
+	});
+	
+	context.subscriptions.push(configChangeDisposable);
+}
 
-// Set up development mode file watcher
-if (IS_DEV && IS_DEV !== "false") {
-	assert(DEV_WORKSPACE_FOLDER, "DEV_WORKSPACE_FOLDER must be set in development")
-	const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(DEV_WORKSPACE_FOLDER, "src/**/*"))
+/**
+ * Show welcome message for new users
+ */
+function showWelcomeMessage(context: vscode.ExtensionContext): void {
+	const hasShownWelcome = context.globalState.get('clineSupreme.hasShownWelcome', false);
+	
+	if (!hasShownWelcome) {
+		vscode.window.showInformationMessage(
+			'Welcome to Cline Supreme! Your enhanced AI-powered coding assistant is ready.',
+			'Open Dashboard',
+			'Don\'t Show Again'
+		).then(selection => {
+			switch (selection) {
+				case 'Open Dashboard':
+					vscode.commands.executeCommand('clineSupreme.openDashboard');
+					break;
+				case 'Don\'t Show Again':
+					context.globalState.update('clineSupreme.hasShownWelcome', true);
+					break;
+			}
+		});
+	}
+}
 
-	watcher.onDidChange(({ scheme, path }) => {
-		console.info(`${scheme} ${path} changed. Reloading VSCode...`)
+// Export for testing and external access
+export {
+	webviewProvider,
+	controller,
+	agentOrchestrator,
+	modelManager,
+	configManager,
+	securityManager,
+	deploymentManager,
+	promptManager,
+	outputChannel
+};
 
-		vscode.commands.executeCommand("workbench.action.reloadWindow")
-	})
+/**
+ * Get the current controller instance
+ */
+export function getController(): Controller | undefined {
+	return controller;
+}
+
+/**
+ * Get the current webview provider instance
+ */
+export function getWebviewProvider(): WebviewProvider | undefined {
+	return webviewProvider;
 }

@@ -1,252 +1,393 @@
-import { Anthropic } from "@anthropic-ai/sdk"
-import { Stream as AnthropicStream } from "@anthropic-ai/sdk/streaming"
-import { withRetry } from "../retry"
-import { anthropicDefaultModelId, AnthropicModelId, anthropicModels, ApiHandlerOptions, ModelInfo } from "@shared/api"
-import { ApiHandler } from "../index"
-import { ApiStream } from "../transform/stream"
+import {
+  BaseProvider,
+  ModelInfo,
+  ChatCompletionRequest,
+  ChatCompletionResponse,
+  StreamChunk,
+  ProviderConfig,
+  ChatMessage
+} from './base';
+import { SecurityManager } from '../../security/manager';
 
-interface AnthropicHandlerOptions {
-	apiKey?: string
-	anthropicBaseUrl?: string
-	apiModelId?: string
-	thinkingBudgetTokens?: number
+export interface AnthropicConfig extends ProviderConfig {
+  version?: string;
 }
 
-export class AnthropicHandler implements ApiHandler {
-	private options: AnthropicHandlerOptions
-	private client: Anthropic | undefined
+export class AnthropicProvider extends BaseProvider {
+  private readonly baseUrl: string;
+  private readonly version: string;
+  private readonly models: ModelInfo[] = [
+    {
+      id: 'claude-3-opus-20240229',
+      name: 'Claude 3 Opus',
+      provider: 'anthropic',
+      capabilities: {
+        maxTokens: 4096,
+        supportsStreaming: true,
+        supportsVision: true,
+        supportsTools: true,
+        supportsFunctions: false,
+        contextWindow: 200000,
+        costPer1kTokens: {
+          input: 0.015,
+          output: 0.075
+        }
+      },
+      description: 'Most powerful Claude model for complex tasks'
+    },
+    {
+      id: 'claude-3-sonnet-20240229',
+      name: 'Claude 3 Sonnet',
+      provider: 'anthropic',
+      capabilities: {
+        maxTokens: 4096,
+        supportsStreaming: true,
+        supportsVision: true,
+        supportsTools: true,
+        supportsFunctions: false,
+        contextWindow: 200000,
+        costPer1kTokens: {
+          input: 0.003,
+          output: 0.015
+        }
+      },
+      description: 'Balanced performance and speed'
+    },
+    {
+      id: 'claude-3-haiku-20240307',
+      name: 'Claude 3 Haiku',
+      provider: 'anthropic',
+      capabilities: {
+        maxTokens: 4096,
+        supportsStreaming: true,
+        supportsVision: true,
+        supportsTools: true,
+        supportsFunctions: false,
+        contextWindow: 200000,
+        costPer1kTokens: {
+          input: 0.00025,
+          output: 0.00125
+        }
+      },
+      description: 'Fastest Claude model for simple tasks'
+    },
+    {
+      id: 'claude-2.1',
+      name: 'Claude 2.1',
+      provider: 'anthropic',
+      capabilities: {
+        maxTokens: 4096,
+        supportsStreaming: true,
+        supportsVision: false,
+        supportsTools: false,
+        supportsFunctions: false,
+        contextWindow: 200000,
+        costPer1kTokens: {
+          input: 0.008,
+          output: 0.024
+        }
+      },
+      description: 'Previous generation Claude model'
+    },
+    {
+      id: 'claude-2.0',
+      name: 'Claude 2.0',
+      provider: 'anthropic',
+      capabilities: {
+        maxTokens: 4096,
+        supportsStreaming: true,
+        supportsVision: false,
+        supportsTools: false,
+        supportsFunctions: false,
+        contextWindow: 100000,
+        costPer1kTokens: {
+          input: 0.008,
+          output: 0.024
+        }
+      },
+      description: 'Original Claude 2 model'
+    }
+  ];
 
-	constructor(options: AnthropicHandlerOptions) {
-		this.options = options
-	}
+  constructor(config: AnthropicConfig, security: SecurityManager) {
+    super('Anthropic', config, security);
+    this.baseUrl = config.baseUrl || 'https://api.anthropic.com';
+    this.version = config.version || '2023-06-01';
+  }
 
-	private ensureClient(): Anthropic {
-		if (!this.client) {
-			if (!this.options.apiKey) {
-				throw new Error("Anthropic API key is required")
-			}
-			try {
-				this.client = new Anthropic({
-					apiKey: this.options.apiKey,
-					baseURL: this.options.anthropicBaseUrl || undefined,
-				})
-			} catch (error) {
-				throw new Error(`Error creating Anthropic client: ${error.message}`)
-			}
-		}
-		return this.client
-	}
+  public getAvailableModels(): ModelInfo[] {
+    return [...this.models];
+  }
 
-	@withRetry()
-	async *createMessage(systemPrompt: string, messages: Anthropic.Messages.MessageParam[]): ApiStream {
-		const client = this.ensureClient()
+  public getModelInfo(modelId: string): ModelInfo | null {
+    return this.models.find(model => model.id === modelId) || null;
+  }
 
-		const model = this.getModel()
-		let stream: AnthropicStream<Anthropic.RawMessageStreamEvent>
-		const modelId = model.id
+  public async validateConfig(): Promise<boolean> {
+    try {
+      // Anthropic doesn't have a simple health check endpoint
+      // So we'll make a minimal completion request
+      const response = await this.makeRequest(
+        `${this.baseUrl}/v1/messages`,
+        {
+          method: 'POST',
+          headers: this.getHeaders(),
+          body: JSON.stringify({
+            model: 'claude-3-haiku-20240307',
+            max_tokens: 1,
+            messages: [{ role: 'user', content: 'Hi' }]
+          })
+        }
+      );
+      
+      const data = await response.json();
+      return data.type === 'message';
+    } catch (error) {
+      this.logger.error('Config validation failed', error);
+      return false;
+    }
+  }
 
-		const budget_tokens = this.options.thinkingBudgetTokens || 0
-		const reasoningOn = (modelId.includes("3-7") || modelId.includes("4-")) && budget_tokens !== 0 ? true : false
+  public async createChatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
+    const url = `${this.baseUrl}/v1/messages`;
+    const body = this.formatRequest(request);
+    
+    try {
+      const response = await this.makeRequest(url, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify(body)
+      });
+      
+      const data = await response.json();
+      
+      // Convert Anthropic response to OpenAI format
+      const converted = this.convertResponse(data, request.model);
+      
+      // Update metrics with token usage
+      if (data.usage) {
+        const cost = this.calculateCost(
+          request.model,
+          data.usage.input_tokens,
+          data.usage.output_tokens
+        );
+        this.updateMetrics(true, data.usage.input_tokens + data.usage.output_tokens, undefined, cost);
+      }
+      
+      return converted;
+    } catch (error) {
+      this.logger.error('Chat completion failed', error);
+      throw error;
+    }
+  }
 
-		switch (modelId) {
-			// 'latest' alias does not support cache_control
-			case "claude-sonnet-4-20250514":
-			case "claude-3-7-sonnet-20250219":
-			case "claude-3-5-sonnet-20241022":
-			case "claude-3-5-haiku-20241022":
-			case "claude-opus-4-20250514":
-			case "claude-opus-4-1-20250805":
-			case "claude-3-opus-20240229":
-			case "claude-3-haiku-20240307": {
-				/*
-				The latest message will be the new user message, one before will be the assistant message from a previous request, and the user message before that will be a previously cached user message. So we need to mark the latest user message as ephemeral to cache it for the next request, and mark the second to last user message as ephemeral to let the server know the last message to retrieve from the cache for the current request..
-				*/
-				const userMsgIndices = messages.reduce(
-					(acc, msg, index) => (msg.role === "user" ? [...acc, index] : acc),
-					[] as number[],
-				)
-				const lastUserMsgIndex = userMsgIndices[userMsgIndices.length - 1] ?? -1
-				const secondLastMsgUserIndex = userMsgIndices[userMsgIndices.length - 2] ?? -1
-				stream = await client.messages.create(
-					{
-						model: modelId,
-						thinking: reasoningOn ? { type: "enabled", budget_tokens: budget_tokens } : undefined,
-						max_tokens: model.info.maxTokens || 8192,
-						// "Thinking isn’t compatible with temperature, top_p, or top_k modifications as well as forced tool use."
-						// (https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#important-considerations-when-using-extended-thinking)
-						temperature: reasoningOn ? undefined : 0,
-						system: [
-							{
-								text: systemPrompt,
-								type: "text",
-								cache_control: { type: "ephemeral" },
-							},
-						], // setting cache breakpoint for system prompt so new tasks can reuse it
-						messages: messages.map((message, index) => {
-							if (index === lastUserMsgIndex || index === secondLastMsgUserIndex) {
-								return {
-									...message,
-									content:
-										typeof message.content === "string"
-											? [
-													{
-														type: "text",
-														text: message.content,
-														cache_control: {
-															type: "ephemeral",
-														},
-													},
-												]
-											: message.content.map((content, contentIndex) =>
-													contentIndex === message.content.length - 1
-														? {
-																...content,
-																cache_control: {
-																	type: "ephemeral",
-																},
-															}
-														: content,
-												),
-								}
-							}
-							return message
-						}),
-						// tools, // cache breakpoints go from tools > system > messages, and since tools dont change, we can just set the breakpoint at the end of system (this avoids having to set a breakpoint at the end of tools which by itself does not meet min requirements for haiku caching)
-						// tool_choice: { type: "auto" },
-						// tools: tools,
-						stream: true,
-					},
-					(() => {
-						// prompt caching: https://x.com/alexalbert__/status/1823751995901272068
-						// https://github.com/anthropics/anthropic-sdk-typescript?tab=readme-ov-file#default-headers
-						// https://github.com/anthropics/anthropic-sdk-typescript/commit/c920b77fc67bd839bfeb6716ceab9d7c9bbe7393
-						switch (modelId) {
-							case "claude-sonnet-4-20250514":
-							case "claude-opus-4-20250514":
-							case "claude-opus-4-1-20250805":
-							case "claude-3-7-sonnet-20250219":
-							case "claude-3-5-sonnet-20241022":
-							case "claude-3-5-haiku-20241022":
-							case "claude-3-opus-20240229":
-							case "claude-3-haiku-20240307":
-								return {
-									headers: {
-										"anthropic-beta": "prompt-caching-2024-07-31",
-									},
-								}
-							default:
-								return undefined
-						}
-					})(),
-				)
-				break
-			}
-			default: {
-				stream = await client.messages.create({
-					model: modelId,
-					max_tokens: model.info.maxTokens || 8192,
-					temperature: 0,
-					system: [{ text: systemPrompt, type: "text" }],
-					messages,
-					// tools,
-					// tool_choice: { type: "auto" },
-					stream: true,
-				})
-				break
-			}
-		}
+  public async *createStreamingChatCompletion(request: ChatCompletionRequest): AsyncIterable<StreamChunk> {
+    const url = `${this.baseUrl}/v1/messages`;
+    const body = this.formatRequest({ ...request, stream: true });
+    
+    try {
+      const response = await this.makeRequest(url, {
+        method: 'POST',
+        headers: {
+          ...this.getHeaders(),
+          'Accept': 'text/event-stream'
+        },
+        body: JSON.stringify(body)
+      });
+      
+      if (!response.body) {
+        throw new Error('No response body for streaming');
+      }
+      
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          
+          if (done) {
+            break;
+          }
+          
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+          
+          for (const line of lines) {
+            const trimmed = line.trim();
+            
+            if (trimmed === '') continue;
+            if (trimmed === 'data: [DONE]') return;
+            if (!trimmed.startsWith('data: ')) continue;
+            
+            try {
+              const data = JSON.parse(trimmed.slice(6));
+              const converted = this.convertStreamChunk(data, request.model);
+              if (converted) {
+                yield converted;
+              }
+            } catch (error) {
+              this.logger.warn('Failed to parse streaming chunk', error);
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (error) {
+      this.logger.error('Streaming chat completion failed', error);
+      throw error;
+    }
+  }
 
-		for await (const chunk of stream) {
-			switch (chunk?.type) {
-				case "message_start":
-					// tells us cache reads/writes/input/output
-					const usage = chunk.message.usage
-					yield {
-						type: "usage",
-						inputTokens: usage.input_tokens || 0,
-						outputTokens: usage.output_tokens || 0,
-						cacheWriteTokens: usage.cache_creation_input_tokens || undefined,
-						cacheReadTokens: usage.cache_read_input_tokens || undefined,
-					}
-					break
-				case "message_delta":
-					// tells us stop_reason, stop_sequence, and output tokens along the way and at the end of the message
+  private getHeaders(): Record<string, string> {
+    return {
+      'Content-Type': 'application/json',
+      'x-api-key': this.config.apiKey,
+      'anthropic-version': this.version
+    };
+  }
 
-					yield {
-						type: "usage",
-						inputTokens: 0,
-						outputTokens: chunk.usage.output_tokens || 0,
-					}
-					break
-				case "message_stop":
-					// no usage data, just an indicator that the message is done
-					break
-				case "content_block_start":
-					switch (chunk.content_block.type) {
-						case "thinking":
-							yield {
-								type: "reasoning",
-								reasoning: chunk.content_block.thinking || "",
-							}
-							break
-						case "redacted_thinking":
-							// Handle redacted thinking blocks - we still mark it as reasoning
-							// but note that the content is encrypted
-							yield {
-								type: "reasoning",
-								reasoning: "[Redacted thinking block]",
-							}
-							break
-						case "text":
-							// we may receive multiple text blocks, in which case just insert a line break between them
-							if (chunk.index > 0) {
-								yield {
-									type: "text",
-									text: "\n",
-								}
-							}
-							yield {
-								type: "text",
-								text: chunk.content_block.text,
-							}
-							break
-					}
-					break
-				case "content_block_delta":
-					switch (chunk.delta.type) {
-						case "thinking_delta":
-							yield {
-								type: "reasoning",
-								reasoning: chunk.delta.thinking,
-							}
-							break
-						case "text_delta":
-							yield {
-								type: "text",
-								text: chunk.delta.text,
-							}
-							break
-						case "signature_delta":
-							// We don't need to do anything with the signature in the client
-							// It's used when sending the thinking block back to the API
-							break
-					}
-					break
-				case "content_block_stop":
-					break
-			}
-		}
-	}
+  private formatRequest(request: ChatCompletionRequest): any {
+    // Convert OpenAI format to Anthropic format
+    const { messages, system } = this.convertMessages(request.messages);
+    
+    const formatted: any = {
+      model: request.model,
+      messages,
+      max_tokens: request.max_tokens || 4096,
+      ...(system && { system }),
+      ...(request.temperature !== undefined && { temperature: request.temperature }),
+      ...(request.top_p !== undefined && { top_p: request.top_p }),
+      ...(request.stop && { stop_sequences: Array.isArray(request.stop) ? request.stop : [request.stop] }),
+      ...(request.stream !== undefined && { stream: request.stream })
+    };
+    
+    // Handle tools if supported
+    if (request.tools && this.supportsTools(request.model)) {
+      formatted.tools = request.tools.map(tool => ({
+        name: tool.function.name,
+        description: tool.function.description,
+        input_schema: tool.function.parameters
+      }));
+    }
+    
+    return formatted;
+  }
 
-	getModel(): { id: AnthropicModelId; info: ModelInfo } {
-		const modelId = this.options.apiModelId
-		if (modelId && modelId in anthropicModels) {
-			const id = modelId as AnthropicModelId
-			return { id, info: anthropicModels[id] }
-		}
-		return {
-			id: anthropicDefaultModelId,
-			info: anthropicModels[anthropicDefaultModelId],
-		}
-	}
+  private convertMessages(messages: ChatMessage[]): { messages: any[]; system?: string } {
+    let system: string | undefined;
+    const convertedMessages: any[] = [];
+    
+    for (const message of messages) {
+      if (message.role === 'system') {
+        system = message.content;
+        continue;
+      }
+      
+      if (message.role === 'tool') {
+        // Convert tool response to user message
+        convertedMessages.push({
+          role: 'user',
+          content: `Tool result: ${message.content}`
+        });
+        continue;
+      }
+      
+      convertedMessages.push({
+        role: message.role === 'assistant' ? 'assistant' : 'user',
+        content: message.content
+      });
+    }
+    
+    return { messages: convertedMessages, system };
+  }
+
+  private convertResponse(anthropicResponse: any, model: string): ChatCompletionResponse {
+    return {
+      id: anthropicResponse.id || `chatcmpl-${Date.now()}`,
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: anthropicResponse.content?.[0]?.text || ''
+          },
+          finish_reason: this.mapStopReason(anthropicResponse.stop_reason)
+        }
+      ],
+      usage: {
+        prompt_tokens: anthropicResponse.usage?.input_tokens || 0,
+        completion_tokens: anthropicResponse.usage?.output_tokens || 0,
+        total_tokens: (anthropicResponse.usage?.input_tokens || 0) + (anthropicResponse.usage?.output_tokens || 0)
+      }
+    };
+  }
+
+  private convertStreamChunk(anthropicChunk: any, model: string): StreamChunk | null {
+    if (anthropicChunk.type === 'content_block_delta') {
+      return {
+        id: `chatcmpl-${Date.now()}`,
+        object: 'chat.completion.chunk',
+        created: Math.floor(Date.now() / 1000),
+        model,
+        choices: [
+          {
+            index: 0,
+            delta: {
+              content: anthropicChunk.delta?.text || ''
+            }
+          }
+        ]
+      };
+    }
+    
+    if (anthropicChunk.type === 'message_stop') {
+      return {
+        id: `chatcmpl-${Date.now()}`,
+        object: 'chat.completion.chunk',
+        created: Math.floor(Date.now() / 1000),
+        model,
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            finish_reason: 'stop'
+          }
+        ]
+      };
+    }
+    
+    return null;
+  }
+
+  private mapStopReason(reason: string): 'stop' | 'length' | 'tool_calls' | 'content_filter' {
+    switch (reason) {
+      case 'end_turn':
+        return 'stop';
+      case 'max_tokens':
+        return 'length';
+      case 'tool_use':
+        return 'tool_calls';
+      case 'stop_sequence':
+        return 'stop';
+      default:
+        return 'stop';
+    }
+  }
+
+  private supportsTools(model: string): boolean {
+    const modelInfo = this.getModelInfo(model);
+    return modelInfo?.capabilities.supportsTools || false;
+  }
+
+  public async getModelDetails(): Promise<ModelInfo[]> {
+    // Anthropic doesn't have a models endpoint, so return our static list
+    return this.getAvailableModels();
+  }
 }

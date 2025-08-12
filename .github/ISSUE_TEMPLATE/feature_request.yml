@@ -1,0 +1,191 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement for Cline Supreme
+title: "[FEATURE] "
+labels: ["enhancement", "needs-triage"]
+assignees:
+  - jukey
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        # ✨ Feature Request for Cline Supreme
+        
+        **Thank you for suggesting a new feature!** Your ideas help us make Cline Supreme even better.
+        
+        ---
+        
+        **🏢 Rick Jefferson Solutions**  
+        📞 **Support**: [945-308-8003](tel:945-308-8003) | 📧 **Email**: [support@rjbizsolution.com](mailto:support@rjbizsolution.com)
+        
+        ---
+
+  - type: textarea
+    id: feature-description
+    attributes:
+      label: 🎯 Feature Description
+      description: A clear and concise description of the feature you'd like to see.
+      placeholder: Describe the feature you want...
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: 🤔 Problem Statement
+      description: What problem does this feature solve? What pain point does it address?
+      placeholder: Explain the problem this feature would solve...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: 💡 Proposed Solution
+      description: Describe the solution you'd like to see implemented.
+      placeholder: How should this feature work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 🔄 Alternatives Considered
+      description: Describe any alternative solutions or features you've considered.
+      placeholder: What other approaches have you thought about?
+
+  - type: dropdown
+    id: feature-category
+    attributes:
+      label: 📂 Feature Category
+      description: Which category does this feature belong to?
+      options:
+        - AI Agent Enhancement
+        - User Interface/UX
+        - Performance Optimization
+        - Security & Compliance
+        - Integration (APIs, Tools)
+        - Documentation
+        - Developer Experience
+        - Multi-Agent Orchestration
+        - Legal/Regulatory Tools
+        - Automation & Workflows
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: affected-agents
+    attributes:
+      label: 🤖 Related AI Agents
+      description: Which AI agents would this feature involve or enhance?
+      options:
+        - label: 🎯 Orchestrator Agent
+        - label: 🔨 Builder Agent
+        - label: 🎨 Designer Agent
+        - label: 🔍 Researcher Agent
+        - label: ⚡ Optimizer Agent
+        - label: 🛡️ Security Agent
+        - label: 🚀 Deploy Agent
+        - label: ⚖️ Compliance Agent
+        - label: 📖 Docs Agent
+        - label: 🧠 Memory Agent
+        - label: 🔧 Specialist Agent
+        - label: New Agent Type
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 🚨 Priority Level
+      description: How important is this feature to you?
+      options:
+        - Low - Nice to have
+        - Medium - Would improve workflow
+        - High - Significantly impacts productivity
+        - Critical - Blocking current work
+    validations:
+      required: true
+
+  - type: dropdown
+    id: user-type
+    attributes:
+      label: 👤 User Type
+      description: What type of user would benefit from this feature?
+      options:
+        - Individual Developer
+        - Small Team (2-10 people)
+        - Medium Team (11-50 people)
+        - Large Organization (50+ people)
+        - Legal Professional
+        - Compliance Officer
+        - All Users
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: 🎬 Use Cases
+      description: Provide specific examples of how this feature would be used.
+      placeholder: |
+        Example scenarios:
+        1. When working on...
+        2. During the process of...
+        3. To help with...
+
+  - type: textarea
+    id: mockups
+    attributes:
+      label: 🎨 Mockups/Wireframes
+      description: If you have any visual ideas, mockups, or wireframes, please share them here.
+      placeholder: Drag and drop images or describe the visual design...
+
+  - type: textarea
+    id: technical-considerations
+    attributes:
+      label: ⚙️ Technical Considerations
+      description: Any technical aspects, constraints, or implementation ideas you'd like to share.
+      placeholder: Technical details, API requirements, performance considerations...
+
+  - type: checkboxes
+    id: implementation-help
+    attributes:
+      label: 🤝 Implementation Support
+      description: Would you be willing to help implement this feature?
+      options:
+        - label: I can help with design/mockups
+        - label: I can help with documentation
+        - label: I can help with testing
+        - label: I can help with code implementation
+        - label: I can provide feedback during development
+        - label: I prefer to just submit the idea
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: ✅ Confirmation
+      description: Please confirm the following
+      options:
+        - label: I have searched existing issues to ensure this is not a duplicate
+          required: true
+        - label: I have provided a clear description of the feature
+          required: true
+        - label: I understand this is a free open-source project and features are implemented based on community needs and maintainer availability
+          required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        
+        ## 🚀 Need Custom Development?
+        
+        For custom features, enterprise solutions, or priority development:
+        
+        - 📞 **Call**: [945-308-8003](tel:945-308-8003)
+        - 📧 **Email**: [support@rjbizsolution.com](mailto:support@rjbizsolution.com)
+        - 🌐 **Website**: [rjbizsolution.com](https://rjbizsolution.com)
+        
+        **Rick Jefferson Solutions** - *Enterprise AI Solutions & Legal Technology Innovation*
+        
+        We offer custom development, priority support, and enterprise licensing for organizations with specific needs.

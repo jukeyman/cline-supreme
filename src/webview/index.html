@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cline Supreme - Multi-Agent AI Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/framer-motion/10.16.4/framer-motion.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .dark-glass {
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .agent-card {
+            transition: all 0.3s ease;
+            transform: translateY(0);
+        }
+        
+        .agent-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+        
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        
+        .status-active { background-color: #10b981; }
+        .status-idle { background-color: #f59e0b; }
+        .status-error { background-color: #ef4444; }
+        .status-offline { background-color: #6b7280; }
+        
+        .chat-message {
+            animation: slideIn 0.3s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .typing-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #6b7280;
+            animation: typing 1.4s infinite ease-in-out;
+        }
+        
+        .typing-indicator:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator:nth-child(2) { animation-delay: -0.16s; }
+        
+        @keyframes typing {
+            0%, 80%, 100% {
+                transform: scale(0);
+                opacity: 0.5;
+            }
+            40% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .progress-bar {
+            background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+            height: 4px;
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+        
+        .sidebar {
+            background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+        }
+        
+        .main-content {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+        }
+        
+        .task-item {
+            transition: all 0.2s ease;
+        }
+        
+        .task-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+        }
+        
+        .floating-action {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 1000;
+        }
+        
+        .notification {
+            position: fixed;
+            top: 24px;
+            right: 24px;
+            z-index: 1001;
+            min-width: 300px;
+            animation: slideInRight 0.3s ease-out;
+        }
+        
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        .code-block {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+            overflow-x: auto;
+        }
+        
+        .agent-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        
+        .deployment-status {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .deployment-success {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        
+        .deployment-pending {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        
+        .deployment-failed {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white overflow-hidden">
+    <div id="app" class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="sidebar w-64 p-6 flex flex-col">
+            <!-- Logo -->
+            <div class="flex items-center mb-8">
+                <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mr-3">
+                    <i class="fas fa-robot text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold">Cline Supreme</h1>
+                    <p class="text-sm text-gray-400">Multi-Agent AI</p>
+                </div>
+            </div>
+            
+            <!-- Navigation -->
+            <nav class="flex-1">
+                <ul class="space-y-2">
+                    <li>
+                        <a href="#" class="nav-item flex items-center p-3 rounded-lg bg-blue-600 text-white" data-tab="dashboard">
+                            <i class="fas fa-tachometer-alt mr-3"></i>
+                            Dashboard
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center p-3 rounded-lg text-gray-300 hover:bg-gray-700" data-tab="agents">
+                            <i class="fas fa-users mr-3"></i>
+                            Agents
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center p-3 rounded-lg text-gray-300 hover:bg-gray-700" data-tab="tasks">
+                            <i class="fas fa-tasks mr-3"></i>
+                            Tasks
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center p-3 rounded-lg text-gray-300 hover:bg-gray-700" data-tab="chat">
+                            <i class="fas fa-comments mr-3"></i>
+                            Chat
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center p-3 rounded-lg text-gray-300 hover:bg-gray-700" data-tab="deployment">
+                            <i class="fas fa-rocket mr-3"></i>
+                            Deployment
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center p-3 rounded-lg text-gray-300 hover:bg-gray-700" data-tab="analytics">
+                            <i class="fas fa-chart-line mr-3"></i>
+                            Analytics
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center p-3 rounded-lg text-gray-300 hover:bg-gray-700" data-tab="settings">
+                            <i class="fas fa-cog mr-3"></i>
+                            Settings
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            
+            <!-- System Status -->
+            <div class="mt-auto">
+                <div class="glass-effect rounded-lg p-4">
+                    <h3 class="text-sm font-semibold mb-2">System Status</h3>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-gray-400">CPU</span>
+                            <span class="text-xs text-green-400" id="cpu-usage">45%</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-gray-400">Memory</span>
+                            <span class="text-xs text-blue-400" id="memory-usage">2.1GB</span>
+                        </div>
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs text-gray-400">Active Agents</span>
+                            <span class="text-xs text-purple-400" id="active-agents">5</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="main-content flex-1 flex flex-col">
+            <!-- Header -->
+            <header class="p-6 border-b border-gray-700">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-2xl font-bold" id="page-title">Dashboard</h2>
+                        <p class="text-gray-400" id="page-subtitle">Overview of your AI agents and tasks</p>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <button class="btn-primary px-4 py-2 rounded-lg" id="new-task-btn">
+                            <i class="fas fa-plus mr-2"></i>
+                            New Task
+                        </button>
+                        <div class="relative">
+                            <button class="p-2 rounded-lg bg-gray-700 hover:bg-gray-600" id="notifications-btn">
+                                <i class="fas fa-bell"></i>
+                                <span class="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- Content Area -->
+            <main class="flex-1 p-6 overflow-y-auto">
+                <!-- Dashboard Tab -->
+                <div id="dashboard-tab" class="tab-content">
+                    <!-- Metrics Cards -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <div class="metric-card rounded-xl p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center">
+                                    <i class="fas fa-tasks text-white"></i>
+                                </div>
+                                <span class="text-2xl font-bold" id="total-tasks">24</span>
+                            </div>
+                            <h3 class="text-sm font-semibold text-gray-300">Total Tasks</h3>
+                            <p class="text-xs text-green-400">+12% from last week</p>
+                        </div>
+                        
+                        <div class="metric-card rounded-xl p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">
+                                    <i class="fas fa-check-circle text-white"></i>
+                                </div>
+                                <span class="text-2xl font-bold" id="completed-tasks">18</span>
+                            </div>
+                            <h3 class="text-sm font-semibold text-gray-300">Completed</h3>
+                            <p class="text-xs text-green-400">75% success rate</p>
+                        </div>
+                        
+                        <div class="metric-card rounded-xl p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center">
+                                    <i class="fas fa-users text-white"></i>
+                                </div>
+                                <span class="text-2xl font-bold" id="active-agents-count">8</span>
+                            </div>
+                            <h3 class="text-sm font-semibold text-gray-300">Active Agents</h3>
+                            <p class="text-xs text-blue-400">All systems operational</p>
+                        </div>
+                        
+                        <div class="metric-card rounded-xl p-6">
+                            <div class="flex items-center justify-between mb-4">
+                                <div class="w-12 h-12 bg-orange-500 rounded-lg flex items-center justify-center">
+                                    <i class="fas fa-rocket text-white"></i>
+                                </div>
+                                <span class="text-2xl font-bold" id="deployments-count">5</span>
+                            </div>
+                            <h3 class="text-sm font-semibold text-gray-300">Deployments</h3>
+                            <p class="text-xs text-green-400">All successful</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Recent Activity -->
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div class="glass-effect rounded-xl p-6">
+                            <h3 class="text-lg font-semibold mb-4">Recent Tasks</h3>
+                            <div class="space-y-3" id="recent-tasks">
+                                <!-- Tasks will be populated by JavaScript -->
+                            </div>
+                        </div>
+                        
+                        <div class="glass-effect rounded-xl p-6">
+                            <h3 class="text-lg font-semibold mb-4">Agent Activity</h3>
+                            <div class="space-y-3" id="agent-activity">
+                                <!-- Agent activity will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Agents Tab -->
+                <div id="agents-tab" class="tab-content hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="agents-grid">
+                        <!-- Agent cards will be populated by JavaScript -->
+                    </div>
+                </div>
+                
+                <!-- Tasks Tab -->
+                <div id="tasks-tab" class="tab-content hidden">
+                    <div class="glass-effect rounded-xl p-6">
+                        <div class="flex items-center justify-between mb-6">
+                            <h3 class="text-lg font-semibold">All Tasks</h3>
+                            <div class="flex items-center space-x-4">
+                                <select class="bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-sm" id="task-filter">
+                                    <option value="all">All Tasks</option>
+                                    <option value="pending">Pending</option>
+                                    <option value="running">Running</option>
+                                    <option value="completed">Completed</option>
+                                    <option value="failed">Failed</option>
+                                </select>
+                                <button class="btn-primary px-4 py-2 rounded-lg text-sm" id="refresh-tasks">
+                                    <i class="fas fa-sync-alt mr-2"></i>
+                                    Refresh
+                                </button>
+                            </div>
+                        </div>
+                        <div class="space-y-3" id="tasks-list">
+                            <!-- Tasks will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Chat Tab -->
+                <div id="chat-tab" class="tab-content hidden">
+                    <div class="flex h-full">
+                        <!-- Chat Sidebar -->
+                        <div class="w-1/3 glass-effect rounded-l-xl p-4">
+                            <h3 class="text-lg font-semibold mb-4">Agents</h3>
+                            <div class="space-y-2" id="chat-agents">
+                                <!-- Chat agents will be populated by JavaScript -->
+                            </div>
+                        </div>
+                        
+                        <!-- Chat Area -->
+                        <div class="flex-1 flex flex-col glass-effect rounded-r-xl">
+                            <!-- Chat Header -->
+                            <div class="p-4 border-b border-gray-600">
+                                <div class="flex items-center">
+                                    <div class="agent-avatar mr-3" id="chat-agent-avatar">AI</div>
+                                    <div>
+                                        <h4 class="font-semibold" id="chat-agent-name">Select an Agent</h4>
+                                        <p class="text-sm text-gray-400" id="chat-agent-status">Ready to assist</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Chat Messages -->
+                            <div class="flex-1 p-4 overflow-y-auto" id="chat-messages">
+                                <div class="text-center text-gray-400 mt-8">
+                                    <i class="fas fa-comments text-4xl mb-4"></i>
+                                    <p>Select an agent to start chatting</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Chat Input -->
+                            <div class="p-4 border-t border-gray-600">
+                                <div class="flex items-center space-x-4">
+                                    <input type="text" placeholder="Type your message..." class="flex-1 bg-gray-700 border border-gray-600 rounded-lg px-4 py-2" id="chat-input" disabled>
+                                    <button class="btn-primary px-4 py-2 rounded-lg" id="send-message" disabled>
+                                        <i class="fas fa-paper-plane"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Deployment Tab -->
+                <div id="deployment-tab" class="tab-content hidden">
+                    <div class="space-y-6">
+                        <!-- Deployment Targets -->
+                        <div class="glass-effect rounded-xl p-6">
+                            <h3 class="text-lg font-semibold mb-4">Deployment Targets</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="deployment-targets">
+                                <!-- Deployment targets will be populated by JavaScript -->
+                            </div>
+                        </div>
+                        
+                        <!-- Recent Deployments -->
+                        <div class="glass-effect rounded-xl p-6">
+                            <h3 class="text-lg font-semibold mb-4">Recent Deployments</h3>
+                            <div class="space-y-3" id="recent-deployments">
+                                <!-- Recent deployments will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Analytics Tab -->
+                <div id="analytics-tab" class="tab-content hidden">
+                    <div class="space-y-6">
+                        <!-- Performance Charts -->
+                        <div class="glass-effect rounded-xl p-6">
+                            <h3 class="text-lg font-semibold mb-4">Performance Analytics</h3>
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div>
+                                    <h4 class="text-sm font-semibold text-gray-300 mb-2">Task Completion Rate</h4>
+                                    <canvas id="completion-chart" width="400" height="200"></canvas>
+                                </div>
+                                <div>
+                                    <h4 class="text-sm font-semibold text-gray-300 mb-2">Agent Performance</h4>
+                                    <canvas id="performance-chart" width="400" height="200"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Usage Statistics -->
+                        <div class="glass-effect rounded-xl p-6">
+                            <h3 class="text-lg font-semibold mb-4">Usage Statistics</h3>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="usage-stats">
+                                <!-- Usage stats will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Settings Tab -->
+                <div id="settings-tab" class="tab-content hidden">
+                    <div class="space-y-6">
+                        <!-- General Settings -->
+                        <div class="glass-effect rounded-xl p-6">
+                            <h3 class="text-lg font-semibold mb-4">General Settings</h3>
+                            <div class="space-y-4" id="general-settings">
+                                <!-- Settings will be populated by JavaScript -->
+                            </div>
+                        </div>
+                        
+                        <!-- API Configuration -->
+                        <div class="glass-effect rounded-xl p-6">
+                            <h3 class="text-lg font-semibold mb-4">API Configuration</h3>
+                            <div class="space-y-4" id="api-settings">
+                                <!-- API settings will be populated by JavaScript -->
+                            </div>
+                        </div>
+                        
+                        <!-- Agent Configuration -->
+                        <div class="glass-effect rounded-xl p-6">
+                            <h3 class="text-lg font-semibold mb-4">Agent Configuration</h3>
+                            <div class="space-y-4" id="agent-settings">
+                                <!-- Agent settings will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+    
+    <!-- Floating Action Button -->
+    <div class="floating-action">
+        <button class="w-14 h-14 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center justify-center" id="quick-action">
+            <i class="fas fa-magic text-white text-xl"></i>
+        </button>
+    </div>
+    
+    <!-- Notification Container -->
+    <div id="notifications"></div>
+    
+    <!-- Modals -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center">
+        <div class="glass-effect rounded-xl p-6 max-w-md w-full mx-4" id="modal-content">
+            <!-- Modal content will be populated by JavaScript -->
+        </div>
+    </div>
+    
+    <script src="./script.js"></script>
+</body>
+</html>

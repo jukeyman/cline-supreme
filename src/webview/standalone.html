@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cline Supreme - Multi-Agent AI Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .dark-glass {
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .agent-card {
+            transition: all 0.3s ease;
+            transform: translateY(0);
+        }
+        
+        .agent-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+        
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        
+        .status-active { background-color: #10b981; }
+        .status-idle { background-color: #f59e0b; }
+        .status-error { background-color: #ef4444; }
+        .status-offline { background-color: #6b7280; }
+        
+        .metric-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1) 0%, rgba(255, 255, 255, 0.05) 100%);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        .sidebar {
+            background: linear-gradient(180deg, #1f2937 0%, #111827 100%);
+        }
+        
+        .main-content {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.3);
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white overflow-hidden">
+    <div id="app" class="flex h-screen">
+        <!-- Sidebar -->
+        <div class="sidebar w-64 p-6 flex flex-col">
+            <!-- Logo -->
+            <div class="flex items-center mb-8">
+                <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center mr-3">
+                    <i class="fas fa-robot text-white"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold">Cline Supreme</h1>
+                    <p class="text-sm text-gray-400">Multi-Agent AI</p>
+                </div>
+            </div>
+            
+            <!-- Navigation -->
+            <nav class="flex-1">
+                <ul class="space-y-2">
+                    <li>
+                        <a href="#" class="nav-item flex items-center p-3 rounded-lg bg-blue-600 text-white" data-tab="dashboard">
+                            <i class="fas fa-tachometer-alt mr-3"></i>
+                            Dashboard
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center p-3 rounded-lg text-gray-300 hover:bg-gray-700" data-tab="agents">
+                            <i class="fas fa-users mr-3"></i>
+                            Agents
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center p-3 rounded-lg text-gray-300 hover:bg-gray-700" data-tab="tasks">
+                            <i class="fas fa-tasks mr-3"></i>
+                            Tasks
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center p-3 rounded-lg text-gray-300 hover:bg-gray-700" data-tab="chat">
+                            <i class="fas fa-comments mr-3"></i>
+                            Chat
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="nav-item flex items-center p-3 rounded-lg text-gray-300 hover:bg-gray-700" data-tab="deployment">
+                            <i class="fas fa-rocket mr-3"></i>
+                            Deployment
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            
+            <!-- Status -->
+            <div class="mt-auto">
+                <div class="glass-effect rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-sm text-gray-300">System Status</span>
+                        <span class="status-indicator status-active"></span>
+                    </div>
+                    <div class="text-xs text-gray-400">
+                        <div>CPU: 45%</div>
+                        <div>Memory: 2.1GB</div>
+                        <div>Active Agents: 5</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="main-content flex-1 p-6 overflow-y-auto">
+            <!-- Header -->
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold mb-1">Dashboard</h2>
+                    <p class="text-gray-400">Welcome to Cline Supreme Multi-Agent System</p>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <button class="btn-primary px-4 py-2 rounded-lg">
+                        <i class="fas fa-plus mr-2"></i>
+                        New Task
+                    </button>
+                    <button class="glass-effect p-2 rounded-lg">
+                        <i class="fas fa-bell"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Metrics Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="metric-card rounded-lg p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-blue-500 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-tasks text-white"></i>
+                        </div>
+                        <span class="text-2xl font-bold">24</span>
+                    </div>
+                    <h3 class="text-sm font-medium text-gray-300 mb-1">Active Tasks</h3>
+                    <p class="text-xs text-green-400">+12% from last hour</p>
+                </div>
+                
+                <div class="metric-card rounded-lg p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-green-500 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-users text-white"></i>
+                        </div>
+                        <span class="text-2xl font-bold">11</span>
+                    </div>
+                    <h3 class="text-sm font-medium text-gray-300 mb-1">Active Agents</h3>
+                    <p class="text-xs text-green-400">All systems operational</p>
+                </div>
+                
+                <div class="metric-card rounded-lg p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-purple-500 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-rocket text-white"></i>
+                        </div>
+                        <span class="text-2xl font-bold">8</span>
+                    </div>
+                    <h3 class="text-sm font-medium text-gray-300 mb-1">Deployments</h3>
+                    <p class="text-xs text-green-400">3 pending</p>
+                </div>
+                
+                <div class="metric-card rounded-lg p-6">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-orange-500 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-chart-line text-white"></i>
+                        </div>
+                        <span class="text-2xl font-bold">94%</span>
+                    </div>
+                    <h3 class="text-sm font-medium text-gray-300 mb-1">Success Rate</h3>
+                    <p class="text-xs text-green-400">+2% improvement</p>
+                </div>
+            </div>
+            
+            <!-- Recent Activity -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Recent Tasks -->
+                <div class="glass-effect rounded-lg p-6">
+                    <h3 class="text-lg font-semibold mb-4">Recent Tasks</h3>
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center mr-3">
+                                    <i class="fas fa-code text-white text-xs"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium">Generate React Component</p>
+                                    <p class="text-xs text-gray-400">Builder Agent • 2 min ago</p>
+                                </div>
+                            </div>
+                            <span class="status-indicator status-active"></span>
+                        </div>
+                        
+                        <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center mr-3">
+                                    <i class="fas fa-check text-white text-xs"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium">Deploy to Vercel</p>
+                                    <p class="text-xs text-gray-400">Deployment Agent • 5 min ago</p>
+                                </div>
+                            </div>
+                            <span class="status-indicator status-active"></span>
+                        </div>
+                        
+                        <div class="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
+                            <div class="flex items-center">
+                                <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center mr-3">
+                                    <i class="fas fa-palette text-white text-xs"></i>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium">UI Design Review</p>
+                                    <p class="text-xs text-gray-400">Designer Agent • 8 min ago</p>
+                                </div>
+                            </div>
+                            <span class="status-indicator status-idle"></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Agent Activity -->
+                <div class="glass-effect rounded-lg p-6">
+                    <h3 class="text-lg font-semibold mb-4">Agent Activity</h3>
+                    <div class="space-y-4">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full flex items-center justify-center mr-3">
+                                    <span class="text-white font-semibold text-sm">OR</span>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium">Orchestrator</p>
+                                    <p class="text-xs text-gray-400">Managing 5 tasks</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="status-indicator status-active"></span>
+                                <span class="text-xs text-gray-400">Active</span>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 bg-gradient-to-r from-green-500 to-green-600 rounded-full flex items-center justify-center mr-3">
+                                    <span class="text-white font-semibold text-sm">BU</span>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium">Builder</p>
+                                    <p class="text-xs text-gray-400">Coding components</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="status-indicator status-active"></span>
+                                <span class="text-xs text-gray-400">Active</span>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 bg-gradient-to-r from-purple-500 to-purple-600 rounded-full flex items-center justify-center mr-3">
+                                    <span class="text-white font-semibold text-sm">DE</span>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium">Designer</p>
+                                    <p class="text-xs text-gray-400">Creating mockups</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="status-indicator status-idle"></span>
+                                <span class="text-xs text-gray-400">Idle</span>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center">
+                                <div class="w-10 h-10 bg-gradient-to-r from-orange-500 to-orange-600 rounded-full flex items-center justify-center mr-3">
+                                    <span class="text-white font-semibold text-sm">DP</span>
+                                </div>
+                                <div>
+                                    <p class="text-sm font-medium">Deployment</p>
+                                    <p class="text-xs text-gray-400">Ready for deploy</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center">
+                                <span class="status-indicator status-active"></span>
+                                <span class="text-xs text-gray-400">Active</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Demo Notice -->
+    <div class="fixed bottom-4 left-4 glass-effect rounded-lg p-4 max-w-sm">
+        <div class="flex items-center mb-2">
+            <i class="fas fa-info-circle text-blue-400 mr-2"></i>
+            <span class="text-sm font-medium">Demo Mode</span>
+        </div>
+        <p class="text-xs text-gray-400">
+            This is a standalone demo of the Cline Supreme dashboard. 
+            Real functionality requires VS Code extension integration.
+        </p>
+    </div>
+    
+    <script>
+        // Simple demo functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            // Add some basic interactivity
+            const navItems = document.querySelectorAll('.nav-item');
+            
+            navItems.forEach(item => {
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    
+                    // Remove active class from all items
+                    navItems.forEach(nav => {
+                        nav.classList.remove('bg-blue-600', 'text-white');
+                        nav.classList.add('text-gray-300', 'hover:bg-gray-700');
+                    });
+                    
+                    // Add active class to clicked item
+                    this.classList.remove('text-gray-300', 'hover:bg-gray-700');
+                    this.classList.add('bg-blue-600', 'text-white');
+                    
+                    // Update header based on selected tab
+                    const tab = this.dataset.tab;
+                    const header = document.querySelector('h2');
+                    const subtitle = document.querySelector('p.text-gray-400');
+                    
+                    switch(tab) {
+                        case 'dashboard':
+                            header.textContent = 'Dashboard';
+                            subtitle.textContent = 'Welcome to Cline Supreme Multi-Agent System';
+                            break;
+                        case 'agents':
+                            header.textContent = 'Agents';
+                            subtitle.textContent = 'Manage your AI agents and their configurations';
+                            break;
+                        case 'tasks':
+                            header.textContent = 'Tasks';
+                            subtitle.textContent = 'Monitor and manage active tasks';
+                            break;
+                        case 'chat':
+                            header.textContent = 'Chat';
+                            subtitle.textContent = 'Communicate with your AI agents';
+                            break;
+                        case 'deployment':
+                            header.textContent = 'Deployment';
+                            subtitle.textContent = 'Deploy your applications to various platforms';
+                            break;
+                    }
+                });
+            });
+            
+            // Add pulse animation to status indicators
+            const statusIndicators = document.querySelectorAll('.status-active');
+            statusIndicators.forEach(indicator => {
+                indicator.classList.add('pulse');
+            });
+            
+            console.log('Cline Supreme Demo Dashboard loaded successfully!');
+        });
+    </script>
+</body>
+</html>

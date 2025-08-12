@@ -48,6 +48,22 @@ webview-ui/node_modules/**
 
 # Ignore docs
 docs/**
+
+# Ignore sensitive files
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Ignore markdown files with sensitive content
+# 🎓 THE ULTIMATE ENTERPRISE COURSE CREA.md
+# 🎯 ULTIMATE COURSE CREATION CLIENT QUE.md
+## 🎯 **YOUR 10 READY-TO-SELL AGENCY PAC.md
+
+# Ignore server files
+server.js
 old_docs/**
 
 # Fix issue where codicons don't get packaged (https://github.com/microsoft/vscode-extension-samples/issues/692)
