@@ -24,6 +24,9 @@ coverage
 !.github/scripts/coverage/
 
 *evals.env
+.env
+.env.*
+!.env.example
 
 ## Generated files ##
 src/generated/
