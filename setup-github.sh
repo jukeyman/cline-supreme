@@ -39,9 +39,10 @@ fi
 # Get repository details
 echo -e "${TEAL}📝 Repository Configuration${NC}"
 echo -e "${NAVY}🏢 Rick Jefferson Solutions - Automated Setup${NC}"
-GITHUB_USERNAME="rickjefferson"
+GITHUB_USERNAME="jukeyman"
 REPO_NAME="cline-supreme"
-echo -e "${GREEN}✅ Using Rick Jefferson Solutions account: $GITHUB_USERNAME/$REPO_NAME${NC}"
+echo -e "${GREEN}✅ Using GitHub account: $GITHUB_USERNAME/$REPO_NAME${NC}"
+echo -e "${TEAL}   Rick Jefferson Solutions branding applied${NC}"
 
 read -p "Make repository private? (y/N): " PRIVATE_REPO
 if [[ $PRIVATE_REPO =~ ^[Yy]$ ]]; then
